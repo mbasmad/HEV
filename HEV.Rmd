@@ -1,0 +1,110 @@
+---
+title: "HEV analisis"
+author: "martin"
+date: "2024-06-28"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Libraries importation
+```{r, libraries, message = FALSE}
+library(readxl)
+library(dplyr)
+library(ggplot2)
+```
+# Custom functions
+```{r}
+replace_text <- function(vec, t1, t2){
+  c <- 1
+  for (value in vec){
+  if (value==t1) {vec[c] <- t2}
+    c <- c+1
+  }
+  return(vec)
+}
+
+format_text <- function(text){
+  text <- iconv(text, "UTF-8", "ASCII//TRANSLIT")
+  text <- gsub("\\s+(\\w)", "\\U\\1", text, perl = TRUE)
+  text <- iconv(text, "latin1", "ASCII", sub="")  
+  return(text)
+}
+
+to_factor <- function(x){
+  c <- 1
+  for (value in x){
+    if (is.na(value)) {}
+    else if (value == 'negativo') {x[c] <- 0} 
+    else if (value == 'positivo') {x[c] <- 1}
+    c <- c + 1
+  }
+  return(x)
+}
+
+to_factor_others <- function(x){
+  c <- 1
+  for (value in x){
+    if (is.na(value)) {}
+    else if (value == '0.0') {x[c] <- 0}
+    else {x[c] <- 1}
+  c <- c + 1
+  }
+  return(x)
+}
+
+double_and_handle_na <- function(x, default_value = 0) {
+  ifelse(is.na(x), default_value, x * 2)
+}
+```
+# File reading
+```{r file_reading, message = FALSE}
+file_path <- 'HEV.xlsx'
+df <- read_excel(file_path, skip=1)
+```
+# Data cleaning
+- **Columns**
+```{r}
+print(colnames(df)[16:18]) # nombres originales de columnas
+colnames(df) <- format_text(colnames(df)) # columnas sin espacio en blanco
+print(colnames(df)[16:18])
+
+# asignar nombre propio a columnas nombradas como "otra"
+colnames(df)[colnames(df) == "Otra...18"] <- "OtraHepatopatiaCronica" 
+colnames(df)[colnames(df) == "Otra...24"] <- "OtraComorbilidad"
+colnames(df)[colnames(df) == "Otra...25"] <- "OtraComorbilidad2"
+print(colnames(df)[16:18])
+```
+- **Rows** 
+```{r}
+df[] <- apply(df, 2, tolower) # pasar todo a minúscula
+df[] <- apply(df, 2, format_text) # eliminar acentos y espacios en blanco para unificar variables
+
+# Unificar las variables brasil y peru
+df$Pais <- replace_text(df$Pais, 'brazil', 'brasil') 
+df$Region <- replace_text(df$Pais, 'brazil', 'brasil') 
+df$Region <- replace_text(df$Region, 'per', 'peru')
+
+# Transformar registros "negativo" y "positivo" en 0 y 1 respectivamente
+df[] <- apply(df, 2, to_factor) 
+
+# Binarizar registros
+df$OtraHepatopatiaCronica <- to_factor_others(df$OtraHepatopatiaCronica)
+df$OtraComorbilidad2 <- to_factor_others(df$OtraComorbilidad2)
+
+# Transformar registros en enteros
+df[, 2:4] <- df[, 2:4] %>% mutate_all(as.integer) 
+df$Edad <- as.integer(round(as.numeric(df$Edad), digit=0))
+df[, 10:26] <- df[, 10:26] %>% mutate_all(as.integer)
+
+# Transformar registros en float
+df[, 27:ncol(df)] <- df[, 27:ncol(df)] %>% suppressWarnings(mutate_all(as.numeric))
+```
+# Plotting
+```{r}
+prop_table <- prop.table(table(df$IgGHEV, df$HealthyControl))
+```
+
+
